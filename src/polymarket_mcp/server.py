@@ -1,11 +1,18 @@
 import os
+import sys
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from fastmcp import FastMCP
 from dotenv import load_dotenv
 from py_clob_client.exceptions import PolyApiException
 
-from .client import PolymarketClient
+# Add the project root to sys.path for fastmcp dev compatibility
+_current_dir = os.path.dirname(os.path.abspath(__file__))
+_project_root = os.path.dirname(os.path.dirname(_current_dir))
+if _project_root not in sys.path:
+    sys.path.insert(0, _project_root)
+
+from src.polymarket_mcp.client import PolymarketClient
 
 
 # Load environment variables
