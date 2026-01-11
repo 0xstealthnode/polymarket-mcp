@@ -43,19 +43,50 @@ class PolymarketClient:
             
         return client
 
-    def list_markets(self, limit: int = 50, closed: bool = False):
+    def list_markets(self, limit: int = 100, closed: bool = False, slug: str = None, search: str = None):
         """
         Fetch markets from Gamma API which has better active/closed filtering.
-        The CLOB API's get_simplified_markets returns old markets first.
+        
+        Args:
+            limit: Max number of markets to return
+            closed: Include closed markets
+            slug: Filter by event slug (e.g. 'us-strike-on-mexico-by')
+            search: Search in event/market title text
         """
-        params = {
-            "limit": limit,
-            "closed": str(closed).lower(),
-            "active": "true"
-        }
-        resp = requests.get(f"{GAMMA_API}/markets", params=params, timeout=30)
-        resp.raise_for_status()
-        markets = resp.json()
+        markets = []
+        
+        # If searching by slug or text, use events API which has better search
+        if slug or search:
+            event_params = {
+                "_limit": limit,
+                "closed": str(closed).lower(),
+                "active": "true"
+            }
+            if slug:
+                event_params["slug"] = slug
+            if search:
+                event_params["title_contains"] = search
+            
+            resp = requests.get(f"{GAMMA_API}/events", params=event_params, timeout=30)
+            resp.raise_for_status()
+            events = resp.json()
+            
+            # Extract markets from events
+            for event in events:
+                event_title = event.get("title")
+                for m in event.get("markets", []):
+                    m["_event_title"] = event_title  # Inject event title
+                    markets.append(m)
+        else:
+            # Default: use markets endpoint
+            params = {
+                "limit": limit,
+                "closed": str(closed).lower(),
+                "active": "true"
+            }
+            resp = requests.get(f"{GAMMA_API}/markets", params=params, timeout=30)
+            resp.raise_for_status()
+            markets = resp.json()
         
         # Parse token IDs from JSON strings and format response
         result = []
@@ -75,7 +106,16 @@ class PolymarketClient:
                     "price": float(outcome_prices[i]) if i < len(outcome_prices) else None
                 })
             
+            # Get title from parent event if available
+            # Check _event_title (injected from events search) or events array
+            event_title = m.get("_event_title")
+            if not event_title:
+                events = m.get("events", [])
+                event_title = events[0].get("title") if events else None
+            title = event_title or m.get("question")
+            
             result.append({
+                "title": title,
                 "condition_id": m.get("conditionId"),
                 "question": m.get("question"),
                 "description": m.get("description"),
@@ -86,6 +126,11 @@ class PolymarketClient:
             })
         
         return result
+
+    def get_market_by_slug(self, slug: str):
+        """Get a market by its URL slug (e.g. 'us-strike-on-mexico-by')."""
+        markets = self.list_markets(limit=1, slug=slug)
+        return markets[0] if markets else None
 
     def get_market(self, condition_id: str):
         return self.client.get_market(condition_id)

@@ -65,7 +65,28 @@ def get_orderbook(token_id: str):
 # We mount it at /mcp
 mcp_app = mcp.http_app(path="/mcp")
 
-app = FastAPI(title="Polymarket MCP Server", lifespan=mcp_app.lifespan)
+app = FastAPI(
+    title="Polymarket MCP Server",
+    description="""
+A specialized Model Context Protocol (MCP) server that interfaces with Polymarket 
+to provide real-time prediction market data to LLMs and REST clients.
+
+## Features
+- **Market Discovery**: Search and list active prediction markets
+- **Real-time Prices**: Get current prices for any market token
+- **Orderbook Data**: View bid/ask depth for markets
+- **MCP Integration**: Connect to Claude, Cursor, and other MCP clients
+
+## Notes
+- All prices are on a 0-1 scale (0.65 = 65% probability = $0.65 per share)
+- Size in orderbooks represents number of shares at that price level
+- Each share pays $1 if outcome wins, $0 otherwise
+    """,
+    version="1.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    lifespan=mcp_app.lifespan
+)
 
 # Mount the MCP server's ASGI app
 app.mount("/mcp", mcp_app)
@@ -77,9 +98,21 @@ def health_check():
     return {"status": "ok", "client_initialized": pm_client is not None}
 
 @app.get("/api/markets")
-def api_list_markets():
+def api_list_markets(
+    limit: int = 100,
+    slug: str = None,
+    search: str = None,
+    closed: bool = False
+):
+    """
+    List markets. 
+    - ?slug=us-strike-on-mexico-by - Filter by exact slug
+    - ?search=trump - Search in question text
+    - ?limit=200 - Max results (default 100)
+    - ?closed=true - Include closed markets
+    """
     if not pm_client: raise HTTPException(503, "Client not initialized")
-    return pm_client.list_markets()
+    return pm_client.list_markets(limit=limit, closed=closed, slug=slug, search=search)
 
 @app.get("/api/markets/{token_id}/price")
 def api_get_price(token_id: str):
