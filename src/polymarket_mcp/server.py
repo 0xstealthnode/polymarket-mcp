@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from fastmcp import FastMCP
 from dotenv import load_dotenv
+from py_clob_client.exceptions import PolyApiException
 
 from .client import PolymarketClient
 
@@ -76,12 +77,18 @@ def api_list_markets():
 @app.get("/api/markets/{token_id}/price")
 def api_get_price(token_id: str):
     if not pm_client: raise HTTPException(503, "Client not initialized")
-    return pm_client.get_price(token_id)
+    try:
+        return pm_client.get_price(token_id)
+    except PolyApiException as e:
+        raise HTTPException(status_code=e.status_code, detail=e.error_msg)
 
 @app.get("/api/markets/{token_id}/orderbook")
 def api_get_orderbook(token_id: str):
     if not pm_client: raise HTTPException(503, "Client not initialized")
-    return pm_client.get_orderbook(token_id)
+    try:
+        return pm_client.get_orderbook(token_id)
+    except PolyApiException as e:
+        raise HTTPException(status_code=e.status_code, detail=e.error_msg)
 
 
 if __name__ == "__main__":
